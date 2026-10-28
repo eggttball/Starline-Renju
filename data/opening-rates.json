@@ -1,0 +1,229 @@
+{
+  "updatedAt": "2026-10-28",
+  "sources": [
+    {
+      "url": "https://www.renju.net/openings/",
+      "title": "RIF standard opening diagrams"
+    },
+    {
+      "url": "https://www.renju.net/article/39/",
+      "title": "Ando Meritee: The Future of Renju, 1997"
+    }
+  ],
+  "notes": [
+    "目前未收錄可信且可校準的 26 開局實測勝率。歷史評述不等同統計。",
+    "疏星、松月、丘月、斜月列為歷史較均衡局型；花月、浦月列為暫定黑方優勢（次級資料，未核驗必勝證明）。評述可能隨後續研究改變。",
+    "電腦在已知勝率中最大化 min(p,1-p)，以考慮交換。沒有實測率時優先用有來源的均衡清單。",
+    "可編輯 openings 的 blackWinRate（0–1）、rateKind（empirical/theoretical）、sampleSize、source；未知率保留 null。"
+  ],
+  "openings": [
+    {
+      "id": "d1",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d2",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d3",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "balanced",
+      "source": "https://www.renju.net/article/39/"
+    },
+    {
+      "id": "d4",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "black-advantage",
+      "source": "https://en.wikipedia.org/wiki/Renju_opening_pattern"
+    },
+    {
+      "id": "d5",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d6",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d7",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d8",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "balanced",
+      "source": "https://www.renju.net/article/39/"
+    },
+    {
+      "id": "d9",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "balanced",
+      "source": "https://www.renju.net/article/39/"
+    },
+    {
+      "id": "d10",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d11",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d12",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "d13",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i1",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i2",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i3",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i4",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i5",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i6",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i7",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "black-advantage",
+      "source": "https://en.wikipedia.org/wiki/Renju_opening_pattern"
+    },
+    {
+      "id": "i8",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i9",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i10",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i11",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "balanced",
+      "source": "https://www.renju.net/article/39/"
+    },
+    {
+      "id": "i12",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    },
+    {
+      "id": "i13",
+      "blackWinRate": null,
+      "rateKind": "unknown",
+      "sampleSize": null,
+      "assessment": "unknown",
+      "source": "https://www.renju.net/openings/"
+    }
+  ]
+}

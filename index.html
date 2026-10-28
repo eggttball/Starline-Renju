@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f4ed">
+  <meta name="description" content="以國際 RIF 規則進行連珠五子棋。26 種開局、交換、黑棋禁手與 AI 對弈。">
+  <title>連珠 RENJU — 一手，一世界</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="連珠首頁"><span class="brand-mark" aria-hidden="true">✳</span><span>RENJU<span class="brand-chinese">連珠</span></span></a>
+      <div class="header-right"><span class="rules-tag"><span></span> INTERNATIONAL RIF RULES</span><button class="text-button" id="rules-button">規則說明 <span aria-hidden="true">↗</span></button></div>
+    </header>
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow">THE ART OF FIVE IN A ROW</p><h1>一手，<span>一世界。</span></h1><p class="intro-copy">在十五路棋盤上，讓每一步都有意義。</p></div>
+        <div class="intro-note"><span class="tiny-stones" aria-hidden="true"><i></i><i></i><i></i></span><p>始於三子 · 勝在五連<br><span>交換，是對平衡的尊重。</span></p></div>
+      </section>
+      <div class="game-layout">
+        <section class="board-panel" aria-label="連珠棋盤與對局狀態">
+          <div class="board-topline"><div class="turn-summary"><span id="turn-stone" class="turn-dot black"></span><div><span id="turn-title">準備開局</span><span id="turn-subtitle">選擇持棋方式，開始一局連珠</span></div></div><span class="move-counter" id="move-counter">第 <b>00</b> 手</span></div>
+          <div class="board-shell">
+            <div class="axis axis-top" aria-hidden="true"></div>
+            <div class="axis axis-left" aria-hidden="true"></div>
+            <div id="board" class="board" role="group" aria-label="15 乘 15 連珠棋盤，方向鍵移動，Enter 落子">
+              <svg id="board-lines" class="board-lines" viewBox="0 0 480 480" aria-hidden="true"></svg>
+              <div id="board-cells" class="board-cells"></div>
+            </div>
+          </div>
+          <div class="board-footer"><span id="hover-info">黑棋禁手：三三・四四・長連</span><label class="switch-label"><input id="show-numbers" type="checkbox" checked><span class="switch"></span>顯示手數</label></div>
+          <div id="game-message" class="game-message" role="status" aria-live="polite"></div>
+          <div id="save-status" class="save-status" role="status">開始後自動保存，關閉網頁也能續局。</div>
+          <div class="board-actions"><button class="subtle-button" id="new-game">↻ 新對局</button><div><button class="subtle-button" id="draw-button" disabled>提出和棋</button><button class="subtle-button" id="resign-button" disabled>放棄比賽</button></div></div>
+        </section>
+        <aside class="side-panel">
+          <section class="settings-section"><div class="section-heading"><h2>開始一局</h2><span>01 / PLAY</span></div><p class="section-copy">選擇你的暫定持棋方</p>
+            <div class="mode-options" role="group" aria-label="持棋方式">
+              <button class="mode-option" data-mode="black" aria-pressed="false"><span class="option-stone black"></span><strong>持黑</strong><small>你提出開局</small></button>
+              <button class="mode-option active" data-mode="white" aria-pressed="true"><span class="option-stone white"></span><strong>持白</strong><small>電腦提出開局</small></button>
+              <button class="mode-option" data-mode="both" aria-pressed="false"><span class="paired-stones"><i></i><i></i></span><strong>雙方</strong><small>同機雙人對弈</small></button>
+            </div>
+            <p class="color-note">RIF 開局可交換，實際持棋方在交換後確定。</p>
+            <button id="start-button" class="primary-button">開始對局 <span aria-hidden="true">→</span></button>
+            <div class="players" id="players" hidden><div><span class="option-stone black"></span><span id="black-player">黑方</span></div><div><span class="option-stone white"></span><span id="white-player">白方</span></div></div>
+          </section>
+          <section class="opening-section"><div class="section-heading"><h2>開局之美</h2><span>02 / OPENING</span></div>
+            <div class="opening-controls"><label for="opening-select">標準三子開局</label><select id="opening-select" aria-label="選擇標準三子開局"></select></div>
+            <div class="opening-preview"><div id="mini-board" class="mini-board" aria-label="開局預覽"></div><div class="opening-description"><span id="opening-category" class="eyebrow">DIRECT / 直指</span><h3 id="opening-name">疏星</h3><p id="opening-rate">接近平衡 · 歷史評述</p><a id="opening-source" href="https://www.renju.net/article/39/" target="_blank" rel="noopener noreferrer">查看資料來源 ↗</a></div></div>
+            <p class="opening-caption" id="opening-caption">電腦優先選擇交換後仍較均衡的開局。</p>
+            <div id="phase-actions" class="phase-actions"></div>
+            <div class="opening-progress" id="opening-progress" aria-label="RIF 開局步驟"><span>三子提案</span><span>交換</span><span>第四手</span><span>兩個第五手</span><span>正式對局</span></div>
+          </section>
+          <section class="agent-section"><div class="section-heading"><h2>對弈夥伴</h2><span>03 / AGENT</span></div><div class="agent-status"><span id="agent-indicator" class="status-light"></span><div><strong id="agent-title">正在讀取 API 設定</strong><p id="agent-detail">黑棋每手由 AI agent 決策</p></div><span class="agent-badge">AI</span></div><button id="retry-button" class="secondary-button" hidden>重新詢問 AI ↻</button><p class="agent-footnote"><span id="white-mode-info">白棋使用本地戰術運算；黑棋正式對局透過 API。</span><button id="setup-button" class="inline-link">設定方式 ↗</button></p></section>
+          <section class="history-section"><div class="section-heading"><h2>棋譜</h2><button id="export-button" class="text-button" disabled>匯出 ↓</button></div><div id="move-history" class="move-history"><p class="empty-history">落下第一子，故事便開始。</p></div></section>
+        </aside>
+      </div>
+      <section class="archive-panel" aria-label="歷史賽局紀錄"><div class="section-heading"><div><p class="eyebrow">YOUR RENJU JOURNEY</p><h2>歷史賽局</h2></div><span id="archive-count">0 局</span></div><p class="archive-copy">每一局正常結束的棋，都留在這裡。點開查看完整棋盤與棋譜。</p><div id="archive-list" class="archive-list"><p class="empty-archive">尚無完成的賽局。未完成的對局會自動續接。</p></div></section>
+    </main>
+    <footer class="site-footer"><span>RENJU / 連珠</span><p>十五路之間，黑白皆有可能。</p><a href="https://www.renju.net/rifrules/" target="_blank" rel="noopener noreferrer">Renju International Federation ↗</a></footer>
+  </div>
+  <dialog id="info-dialog"><div class="dialog-header"><span class="eyebrow">RENJU / GUIDE</span><button id="close-dialog" aria-label="關閉說明">×</button></div><div id="dialog-content"></div></dialog>
+</body>
+</html>
