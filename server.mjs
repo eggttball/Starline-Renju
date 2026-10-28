@@ -7,6 +7,7 @@ import { AgentError, normalizeConfig, publicConfig, requestAgent } from './lib/a
 import { BookError, createBook } from './lib/book.mjs';
 import { BLACK, WHITE, analyzeMove, getLegalMoves } from './lib/rules.mjs';
 import { rankLocalMoves } from './lib/local-ai.mjs';
+import { findTacticalMove } from './lib/tactics.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const BODY_LIMIT = 64 * 1024;
@@ -20,6 +21,7 @@ const STATIC_FILES = new Map([
   ['/lib/game.mjs', ['lib/game.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/openings.mjs', ['lib/openings.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/local-ai.mjs', ['lib/local-ai.mjs', 'text/javascript; charset=utf-8']],
+  ['/lib/tactics.mjs', ['lib/tactics.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/persistence.mjs', ['lib/persistence.mjs', 'text/javascript; charset=utf-8']],
 ]);
 
@@ -199,6 +201,21 @@ export function createServer({ config = loadConfig(), fetchImpl = fetch, book, b
         try {
           const color = pathname === '/api/agent' ? BLACK : WHITE;
           const state = validateState(await readJson(request), color);
+          const tactical = findTacticalMove(state.board, color);
+          if (cancellation.signal.aborted) return;
+          if (tactical) {
+            let result = tactical;
+            if (tactical.winRate !== null) {
+              try {
+                await privateBook.record({ ...state, color, move: tactical.move, winRate: tactical.winRate, source: 'tactical-win' });
+              } catch (error) {
+                if (!(error instanceof BookError)) throw error;
+                result = { ...tactical, memoryWarning: '電腦勝率棋譜暫時無法更新。' };
+              }
+            }
+            if (!response.destroyed && !cancellation.signal.aborted) return json(response, 200, result);
+            return;
+          }
           const policy = await privateBook.query({ ...state, color });
           if (cancellation.signal.aborted) return;
           const useRemote = color === BLACK || publicConfig(privateConfig).configured;

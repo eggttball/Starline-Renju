@@ -3,8 +3,15 @@ import { createGame, proposeOpening, decideSwap, placeStone, offerFifth, chooseF
 import { loadArchive, saveGame, abandonGame } from './lib/persistence.mjs';
 import { OPENINGS, mergeOpeningRates, selectComputerOpening, rateDescription } from './lib/openings.mjs';
 import { chooseLocalMove, computerShouldSwap, chooseLocalFifths, chooseLocalFifth } from './lib/local-ai.mjs';
+import { findTacticalMove } from './lib/tactics.mjs';
 
 const colorName = color => color===BLACK?'黑':'白';
+const validWinRate = rate => typeof rate==='number'&&Number.isFinite(rate)&&rate>=0&&rate<=1;
+const moveRateText = move => validWinRate(move?.winRate)?`${Math.round(move.winRate*100)}%`:'未評估';
+function recordComputerMove(next,{winRate=null,decision}={}) {
+  const move=next.moves.at(-1);
+  return {...next,moves:[...next.moves.slice(0,-1),{...move,computer:true,winRate:validWinRate(winRate)?winRate:null,...(decision?{decision}:{})}]};
+}
 const phases = {
   setup:['提出三子開局','暫定黑方從 26 種標準局型提出開局。'],
   swap:['選擇交換或保持','暫定白方可改持黑棋，或繼續持白。'],
@@ -21,6 +28,7 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
   let game=createGame('white'),selectedMode='white',selectedOpening='d3',openings=OPENINGS.map(o=>({...o}));
   let started=false,busy=false,api={configured:false},apiLoaded=false,agentError=false,message='',isError=false,generation=0,controller=null,destroyed=false;
   let focusedIndex=112,configReady,openingReady;
+  let thinkingPoint=null;
   let browserStorage,archive={active:null,history:[]};
   try {
     browserStorage=storage??win.localStorage;
@@ -125,21 +133,27 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
       $('turn-title').textContent=`${colorName(game.turn)}方 · ${actorLabel(currentActor(game))}${busy?'思考中':''}`;
       $('turn-subtitle').textContent=phases[game.phase][0];
     }
-    const last=game.moves.at(-1),numbers=$('show-numbers').checked;
+    const last=game.moves.at(-1),lastComputer=game.moves.findLast(move=>move.computer===true),numbers=$('show-numbers').checked;
     const winning=new Set((game.result?.winningLine??[]).map(m=>m.row*15+m.col));
     const forbiddenIndex=game.result?.reason==='forbidden'?game.result.attemptedMove.row*15+game.result.attemptedMove.col:-1;
     const moveNumbers=new Map(game.moves.map(m=>[m.row*15+m.col,m.number]));
     cells.forEach((cell,index)=>{
       const row=Math.floor(index/15),col=index%15,color=game.board[index];
       const candidate=game.fifthCandidates.findIndex(p=>p.row===row&&p.col===col);
-      cell.className=`cell ${color?'occupied':'empty'}${winning.has(index)?' winning':''}${index===forbiddenIndex?' forbidden':''}`;
-      cell.setAttribute('aria-label',`${toCoordinate(row,col)}${color?`，${colorName(color)}棋，第 ${moveNumbers.get(index)} 手`:candidate>=0?`，第五手候選 ${candidate===0?'A':'B'}`:'，空位'}`);
+      const evaluating=busy&&thinkingPoint?.row===row&&thinkingPoint?.col===col;
+      const showRate=lastComputer?.row===row&&lastComputer?.col===col;
+      const rateLabel=showRate?`${colorName(color)}方勝率 ${moveRateText(lastComputer)}`:'';
+      cell.className=`cell ${color?'occupied':'empty'}${winning.has(index)?' winning':''}${index===forbiddenIndex?' forbidden':''}${showRate?' evaluated-move':''}${row===14?' bottom-row':''}${col===0?' left-column':col===14?' right-column':''}`;
+      cell.setAttribute('aria-label',`${toCoordinate(row,col)}${color?`，${colorName(color)}棋，第 ${moveNumbers.get(index)} 手${showRate?`，${rateLabel}`:''}`:candidate>=0?`，第五手候選 ${candidate===0?'A':'B'}`:evaluating?'，電腦本地候選落點，評估中':'，空位'}`);
       cell.tabIndex=index===focusedIndex?0:-1;
-      if (color) cell.innerHTML=`<span class="stone ${color===BLACK?'black':'white'}${last?.row===row&&last?.col===col?' last':''}">${numbers?moveNumbers.get(index):''}</span>`;
+      if (color) cell.innerHTML=`<span class="stone ${color===BLACK?'black':'white'}${last?.row===row&&last?.col===col?' last':''}">${numbers?moveNumbers.get(index):''}</span>${showRate?`<span class="move-win-rate" title="${rateLabel}">${moveRateText(lastComputer)}</span>`:''}`;
       else if (candidate>=0) cell.innerHTML=`<span class="stone candidate">${candidate===0?'A':'B'}</span>`;
+      else if (evaluating) cell.innerHTML=`<span class="stone thinking-candidate ${game.turn===BLACK?'black':'white'}" aria-hidden="true">?</span>`;
       else cell.innerHTML=`<span class="stone ghost ${game.turn===BLACK?'black':'white'}"></span>`;
     });
     $('board').classList.toggle('interactive',canPlace());
+    $('thinking-info').hidden=!busy||!thinkingPoint;
+    $('thinking-info').textContent=busy&&thinkingPoint?`本地候選 ${toCoordinate(thinkingPoint.row,thinkingPoint.col)} · 評估中，最終落點可能調整`:'';
     $('phase-actions').replaceChildren();
     if (isHumanTurn()) {
       if (game.phase==='setup') addAction(`提出 ${currentOpening().name} 三子開局`,()=>act(g=>proposeOpening(g,selectedOpening),'三子開局已提出，交由暫定白方決定是否交換。'));
@@ -162,8 +176,8 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
     $('export-button').disabled=!game.moves.length;
     $('agent-indicator').className=`status-light${agentError?' error':busy?' thinking':api.configured?' connected':''}`;
     $('agent-title').textContent=agentError?`${colorName(game.turn)}棋 AI 對局已暫停`:busy&&game.phase==='playing'&&(game.turn===BLACK||game.moves.length>=7)?`${colorName(game.turn)}棋 AI 正在思考`:!apiLoaded?'正在讀取 API 設定':api.configured?'黑棋 AI 已設定':'黑棋 AI 尚未設定';
-    $('agent-detail').textContent=agentError?'保留目前盤面，設定或修復 API 後可重試。':api.configured?'黑白正式對局皆由 AI 評估；記憶會依最新勝率更新。':'未設定時白棋使用本地戰術；黑棋等待 API。';
-    $('white-mode-info').textContent=api.configured?'黑白電腦棋手透過 AI 評估；勝率棋譜會持續更新。':'白棋使用本地戰術運算；黑棋正式對局透過 API。';
+    $('agent-detail').textContent=agentError?'保留目前盤面，設定或修復 API 後可重試。':api.configured?'連五、必擋四與禁手攻擊直接落子；其餘局面由 AI 評估。':'強制戰術直接落子；其餘局面白棋使用本地運算，黑棋等待 API。';
+    $('white-mode-info').textContent='落子標記顯示電腦持棋方的勝率；未經評估的落子顯示「未評估」。';
     $('retry-button').hidden=!agentError;
     $('retry-button').disabled=busy;
     $('move-history').replaceChildren();
@@ -171,6 +185,7 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
     for (const move of game.moves) {
       const item=doc.createElement('div');item.className='history-move';
       item.innerHTML=`<small>${String(move.number).padStart(2,'0')}</small><span class="option-stone ${move.color===BLACK?'black':'white'}"></span><span>${toCoordinate(move.row,move.col)}</span>`;
+      if (move.computer===true) {item.title=`${colorName(move.color)}方勝率 ${moveRateText(move)}`;item.classList.add('computer-move');}
       $('move-history').append(item);
     }
     $('move-history').scrollTop=$('move-history').scrollHeight;
@@ -201,9 +216,12 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
   async function driveComputer() {
     if (destroyed||!started||busy||agentError||currentActor(game)!=='computer'||game.phase==='finished') return;
     const epoch=generation;
-    busy=true;render();
+    busy=true;
     try {
-      await sleep(delay);
+      const tactical=game.phase==='playing'?findTacticalMove(game.board,game.turn):null;
+      thinkingPoint=!tactical&&['fourth','playing'].includes(game.phase)?chooseLocalMove(game.board,game.turn):null;
+      render();
+      if (!tactical) await sleep(delay);
       if (destroyed||epoch!==generation) return;
       if (game.phase==='setup'||game.phase==='swap') await openingReady;
       if (destroyed||epoch!==generation) return;
@@ -216,9 +234,9 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
         const pair=chooseLocalFifths(game);next=offerFifth(offerFifth(game,pair[0].row,pair[0].col),pair[1].row,pair[1].col);note='電腦提出 A、B 兩個第五手，請選擇要保留的黑子。';
       } else if (game.phase==='choose-fifth') {next=chooseFifth(game,chooseLocalFifth(game));note='電腦已選定第五手，接著下白棋第六手。';}
       else if (game.phase==='playing'&&(game.turn===BLACK||game.moves.length>=7)) {
-        if (!apiLoaded) await configReady;
+        if (!tactical&&!apiLoaded) await configReady;
         if (destroyed||epoch!==generation) return;
-        if (game.turn===BLACK&&!api.configured) throw new Error('尚未設定黑棋 AI。請在 renju/.env 填入 API endpoint 與 key，重新啟動伺服器後點「重新詢問 AI」。');
+        if (!tactical&&game.turn===BLACK&&!api.configured) throw new Error('尚未設定黑棋 AI。請在 renju/.env 填入 API endpoint 與 key，重新啟動伺服器後點「重新詢問 AI」。');
         controller=new AbortController();
         const response=await request(game.turn===BLACK?'/api/agent':'/api/white',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({board:game.board,moves:game.moves}),signal:controller.signal});
         const data=await response.json();
@@ -227,9 +245,11 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
         if (!data.move||!Number.isInteger(data.move.row)||!Number.isInteger(data.move.col)) throw new Error('AI 回應缺少有效落點，請重試。');
         const verdict=analyzeMove(game.board,data.move.row,data.move.col,game.turn);
         if (!verdict.legal) throw new Error(verdict.reason);
-        next=placeStone(game,data.move.row,data.move.col);note=data.reason?`AI：${String(data.reason).slice(0,500)}`:`AI 選擇 ${toCoordinate(data.move.row,data.move.col)}。`;
+        next=recordComputerMove(placeStone(game,data.move.row,data.move.col),{winRate:data.winRate,decision:['win','defense','forbidden-four'].includes(data.decision)?data.decision:undefined});
+        note=data.reason?`${data.decision?'電腦':'AI'}：${String(data.reason).slice(0,500)}`:`電腦選擇 ${toCoordinate(data.move.row,data.move.col)}。`;
+        if (data.memoryWarning) note+=' 電腦勝率棋譜暫時無法更新；本局仍會保存於瀏覽器。';
       } else {
-        const move=chooseLocalMove(game.board,game.turn);next=placeStone(game,move.row,move.col);note=`電腦白棋落在 ${toCoordinate(move.row,move.col)}。`;
+        const move=tactical?.move??thinkingPoint??chooseLocalMove(game.board,game.turn);next=recordComputerMove(placeStone(game,move.row,move.col),tactical??{});note=tactical?.reason??`電腦白棋落在 ${toCoordinate(move.row,move.col)}。`;
       }
       if (destroyed||epoch!==generation) return;
       game=persist(next);message=note;isError=false;
@@ -237,14 +257,14 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
       if (destroyed||epoch!==generation||error.name==='AbortError') return;
       message=error.message;isError=true;agentError=true;
     } finally {
-      if (epoch===generation&&!destroyed) {busy=false;controller=null;render();}
+      if (epoch===generation&&!destroyed) {busy=false;thinkingPoint=null;controller=null;render();}
     }
     if (!destroyed&&epoch===generation&&!agentError) void driveComputer();
   }
 
   function reset(mode=selectedMode,abandoned=false) {
     if (started&&game.phase!=='finished'&&!abandoned) {message='請先完成或放棄目前賽局，再開始新對局。';isError=true;render();return false;}
-    generation++;controller?.abort();controller=null;selectedMode=mode;game=createGame(mode);started=false;busy=false;agentError=false;isError=false;message='';render();
+    generation++;controller?.abort();controller=null;thinkingPoint=null;selectedMode=mode;game=createGame(mode);started=false;busy=false;agentError=false;isError=false;message='';render();
     return true;
   }
   function start(mode=selectedMode) {if (!reset(mode)) return;try {game=persist({...game,selectedOpeningId:selectedOpening});started=true;render();void driveComputer();}catch(error){message=error.message;isError=true;render();}}
@@ -269,7 +289,7 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
     $('archive-dialog-meta').textContent=`${dateLabel(record)} · ${record.moves.length} 手 · 黑方 ${actorLabel(record.players[BLACK])}／白方 ${actorLabel(record.players[WHITE])}`;
     const numbers=new Map(record.moves.map(m=>[m.row*15+m.col,m.number]));
     for (let i=0;i<225;i++) {const cell=doc.createElement('div');cell.className='archive-cell';const stone=record.board[i];if (stone) {const span=doc.createElement('span');span.className=stone===BLACK?'black':'white';span.textContent=numbers.get(i);cell.append(span);}if(record.result.reason==='forbidden'&&record.result.attemptedMove?.row*15+record.result.attemptedMove?.col===i)cell.classList.add('forbidden');$('archive-dialog-board').append(cell);}
-    $('archive-dialog-moves').textContent=record.moves.map(m=>`${m.number}.${colorName(m.color)} ${toCoordinate(m.row,m.col)}`).join('  ');
+    $('archive-dialog-moves').textContent=record.moves.map(m=>`${m.number}.${colorName(m.color)} ${toCoordinate(m.row,m.col)}${m.computer===true?`（${moveRateText(m)}）`:''}`).join('  ');
     $('export-archive').addEventListener('click',()=>downloadRecord(record));
   }
   $('close-dialog').addEventListener('click',closeDialog);

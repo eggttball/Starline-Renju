@@ -5,29 +5,30 @@ import { JSDOM } from 'jsdom';
 import { mountApp } from '../app.mjs';
 import { loadArchive, saveGame } from '../lib/persistence.mjs';
 import { createGame, proposeOpening, decideSwap, placeStone, offerFifth, chooseFifth } from '../lib/game.mjs';
+import { analyzeMove } from '../lib/rules.mjs';
 
 const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
 async function waitUntil(predicate) {
   for (let n=0;n<200;n++) {if (predicate()) return;await new Promise(resolve=>setTimeout(resolve,5));}
   assert.fail('UI state did not reach expected condition');
 }
-function boot(t,{configured=false,agent,storage}={}) {
+function boot(t,{configured=false,agent,whiteAgent,storage,delay=0}={}) {
   const dom=new JSDOM(html,{url:'http://127.0.0.1:3000',pretendToBeVisual:true});
-  const calls=[];
+  const calls=[],whiteCalls=[];
   const settings={configured};
   const fetchImpl=async(url,options)=>{
     if (url==='/api/config') return Response.json({...settings,format:'agent-json'});
     if (url==='/api/openings') return Response.json({openings:[]});
     if (url==='/api/agent') {calls.push(options);return agent?agent(options):Response.json({move:{row:14,col:14},reason:'選擇安全落點'});}
-    if (url==='/api/white') return Response.json({move:{row:14,col:13},reason:'本地白棋戰術'});
+    if (url==='/api/white') {whiteCalls.push(options);return whiteAgent?whiteAgent(options):Response.json({move:{row:14,col:13},reason:'本地白棋戰術'});}
     throw new Error('Unexpected route');
   };
-  const app=mountApp(dom.window.document,{fetchImpl,delay:0,storage});
+  const app=mountApp(dom.window.document,{fetchImpl,delay,storage});
   t.after(()=>{app.destroy();dom.window.close();});
   const doc=dom.window.document;
   const clickText=text=>{const button=[...doc.querySelectorAll('button')].find(b=>b.textContent.includes(text));assert.ok(button,`missing ${text}`);button.click();};
   const play=(row,col)=>doc.querySelector(`[data-index="${row*15+col}"]`).click();
-  return {app,doc,dom,calls,settings,clickText,play};
+  return {app,doc,dom,calls,whiteCalls,settings,clickText,play};
 }
 
 test('ready API configuration is displayed without waiting for slow opening data', async t=>{
@@ -192,4 +193,95 @@ test('keyboard navigation selects adjacent coordinate without placing before Ent
   assert.equal(ctx.doc.activeElement.dataset.index,'113');
   assert.equal(ctx.app.getState().moves.length,0);
   assert.match(ctx.doc.activeElement.getAttribute('aria-label'),/I8/);
+});
+
+test('pending computer request marks one legal candidate and replaces it with the final evaluated stone', async t=>{
+  let resolveResponse;
+  const storage=memoryStorage();
+  const ctx=boot(t,{configured:true,storage,agent:()=>new Promise(resolve=>{resolveResponse=resolve;})});
+  await openAsHumanWhite(ctx);await waitUntil(()=>ctx.calls.length===1);
+  const markers=ctx.doc.querySelectorAll('.thinking-candidate');
+  assert.equal(markers.length,1);
+  const index=Number(markers[0].closest('.cell').dataset.index);
+  assert.equal(ctx.app.getState().board[index],0);
+  assert.equal(analyzeMove(ctx.app.getState().board,Math.floor(index/15),index%15,1).legal,true);
+  assert.match(markers[0].closest('.cell').getAttribute('aria-label'),/本地候選.*評估中/);
+  assert.match(ctx.doc.getElementById('thinking-info').textContent,/本地候選/);
+  resolveResponse(Response.json({move:{row:14,col:14},reason:'評估完成',winRate:.83}));
+  await waitUntil(()=>ctx.app.getState().moves.length===7);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,0);
+  assert.equal(ctx.doc.getElementById('thinking-info').hidden,true);
+  assert.equal(ctx.doc.querySelector('[data-index="224"] .move-win-rate').textContent,'83%');
+  assert.match(ctx.doc.querySelector('[data-index="224"]').getAttribute('aria-label'),/黑方勝率 83%/);
+  assert.equal(ctx.app.getState().moves.at(-1).computer,true);
+  assert.equal(loadArchive(storage).active.moves.at(-1).winRate,.83);
+  ctx.doc.getElementById('show-numbers').click();
+  assert.equal(ctx.doc.querySelector('[data-index="224"] .move-win-rate').textContent,'83%');
+  ctx.app.destroy();
+  const reopened=boot(t,{storage,configured:true});
+  assert.equal(reopened.doc.querySelector('[data-index="224"] .move-win-rate').textContent,'83%');
+  reopened.doc.getElementById('draw-button').click();reopened.doc.getElementById('accept-draw').click();
+  reopened.doc.querySelector('.archive-card').click();
+  assert.match(reopened.doc.getElementById('archive-dialog-moves').textContent,/83%/);
+  assert.equal(loadArchive(storage).history[0].moves.at(-1).winRate,.83);
+});
+
+test('candidate is cleared when the agent fails or the game is abandoned', async t=>{
+  let resolveResponse;
+  const ctx=boot(t,{configured:true,agent:()=>new Promise(resolve=>{resolveResponse=resolve;})});
+  await openAsHumanWhite(ctx);await waitUntil(()=>ctx.calls.length===1);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,1);
+  resolveResponse(Response.json({error:{message:'upstream failed'}},{status:502}));
+  await waitUntil(()=>!ctx.doc.getElementById('retry-button').hidden);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,0);
+  assert.equal(ctx.doc.getElementById('thinking-info').hidden,true);
+  ctx.doc.getElementById('retry-button').click();await waitUntil(()=>ctx.calls.length===2);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,1);
+  ctx.doc.getElementById('resign-button').click();
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,0);
+  assert.equal(ctx.doc.querySelectorAll('.move-win-rate').length,0);
+  resolveResponse(Response.json({move:{row:14,col:14},winRate:.9}));
+});
+
+for (const rate of [null,undefined,NaN,1.2,'80%']) test(`unassessed or invalid rate ${String(rate)} is never displayed as a percentage`,async t=>{
+  const ctx=boot(t,{configured:true,agent:()=>Response.json({move:{row:14,col:14},winRate:rate,decision:'defense'})});
+  await openAsHumanWhite(ctx);await waitUntil(()=>ctx.app.getState().moves.length===7);
+  assert.equal(ctx.doc.querySelector('[data-index="224"] .move-win-rate').textContent,'未評估');
+  assert.equal(ctx.app.getState().moves.at(-1).winRate,null);
+});
+
+function formalGame(mode='white') {
+  let game=decideSwap(proposeOpening(createGame(mode),'d4'),false);
+  game=placeStone(game,8,8);game=offerFifth(offerFifth(game,5,5),9,7);game=chooseFifth(game,1);
+  return placeStone(game,8,7);
+}
+
+test('computer winning five bypasses the thinking delay and missing API configuration',async t=>{
+  const storage=memoryStorage();let game=formalGame();
+  const black=[[10,3],[10,4],[10,5],[10,6]],white=[[0,0],[0,2],[0,4],[2,0]];
+  for(let i=0;i<black.length;i++){game=placeStone(game,...black[i]);game=placeStone(game,...white[i]);}
+  saveGame(storage,game);
+  const ctx=boot(t,{storage,delay:60000,agent:()=>Response.json({move:{row:10,col:2},winRate:1,decision:'win',memoryWarning:'電腦勝率棋譜暫時無法更新。'})});
+  await waitUntil(()=>ctx.app.getState().phase==='finished');
+  assert.equal(ctx.app.getState().result.winner,1);
+  assert.equal(ctx.calls.length,1);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,0);
+  assert.equal(ctx.doc.querySelector('[data-index="152"] .move-win-rate').textContent,'100%');
+  assert.match(ctx.doc.getElementById('game-message').textContent,/勝率棋譜.*無法更新/);
+  assert.equal(ctx.doc.getElementById('retry-button').hidden,true);
+  assert.equal(loadArchive(storage).history[0].moves.at(-1).winRate,1);
+});
+
+test('white remote evaluation displays White win rate on its actual final stone',async t=>{
+  const storage=memoryStorage();let game=formalGame('black');game=placeStone(game,0,0);saveGame(storage,game);
+  let resolveResponse;
+  const ctx=boot(t,{storage,configured:true,whiteAgent:()=>new Promise(resolve=>{resolveResponse=resolve;})});
+  await waitUntil(()=>ctx.whiteCalls.length===1);
+  assert.equal(ctx.doc.querySelectorAll('.thinking-candidate').length,1);
+  assert.match(ctx.doc.getElementById('agent-title').textContent,/白棋.*思考/);
+  resolveResponse(Response.json({move:{row:14,col:13},winRate:.76}));
+  await waitUntil(()=>ctx.app.getState().moves.length===8);
+  assert.equal(ctx.doc.querySelector('[data-index="223"] .move-win-rate').textContent,'76%');
+  assert.match(ctx.doc.querySelector('[data-index="223"]').getAttribute('aria-label'),/白方勝率 76%/);
+  assert.equal(loadArchive(storage).active.moves.at(-1).winRate,.76);
 });

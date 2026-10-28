@@ -425,6 +425,7 @@ test('the real page, stylesheet, application, and all public modules are served 
     ['/lib/game.mjs', 'lib/game.mjs', 'text/javascript; charset=utf-8'],
     ['/lib/openings.mjs', 'lib/openings.mjs', 'text/javascript; charset=utf-8'],
     ['/lib/local-ai.mjs', 'lib/local-ai.mjs', 'text/javascript; charset=utf-8'],
+    ['/lib/tactics.mjs', 'lib/tactics.mjs', 'text/javascript; charset=utf-8'],
     ['/lib/persistence.mjs', 'lib/persistence.mjs', 'text/javascript; charset=utf-8'],
   ];
   await withServer({ config }, async (origin) => {

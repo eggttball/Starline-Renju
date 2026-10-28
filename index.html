@@ -18,7 +18,7 @@
     </header>
     <main>
       <section class="intro">
-        <div><p class="eyebrow">THE ART OF FIVE IN A ROW</p><h1>一手，<span>一世界。</span></h1><p class="intro-copy">在十五路棋盤上，讓每一步都有意義。</p></div>
+        <div><p class="eyebrow">THE ART OF FIVE IN A ROW</p><h1>一手<span>一世界</span></h1><p class="intro-copy">在十五路棋盤上，讓每一步都有意義。</p></div>
         <div class="intro-note"><span class="tiny-stones" aria-hidden="true"><i></i><i></i><i></i></span><p>始於三子 · 勝在五連<br><span>交換，是對平衡的尊重。</span></p></div>
       </section>
       <div class="game-layout">
@@ -33,6 +33,7 @@
             </div>
           </div>
           <div class="board-footer"><span id="hover-info">黑棋禁手：三三・四四・長連</span><label class="switch-label"><input id="show-numbers" type="checkbox" checked><span class="switch"></span>顯示手數</label></div>
+          <div id="thinking-info" class="thinking-info" role="status" aria-live="polite" hidden></div>
           <div id="game-message" class="game-message" role="status" aria-live="polite"></div>
           <div id="save-status" class="save-status" role="status">開始後自動保存，關閉網頁也能續局。</div>
           <div class="board-actions"><button class="subtle-button" id="new-game">↻ 新對局</button><div><button class="subtle-button" id="draw-button" disabled>提出和棋</button><button class="subtle-button" id="resign-button" disabled>放棄比賽</button></div></div>

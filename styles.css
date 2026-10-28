@@ -9,3 +9,11 @@
 @media(max-width:760px){.archive-list{grid-template-columns:repeat(2,minmax(0,1fr))}.archive-panel{margin-top:25px}.archive-card{padding:15px 13px}}
 @media(max-width:470px){.archive-list{grid-template-columns:1fr}.archive-card strong{font-size:15px}}
 .cell.forbidden .stone{box-shadow:0 0 0 2px #b24730,0 0 12px #b2473059}
+.cell .thinking-candidate{opacity:.55;border:2px dashed #8c641f;box-shadow:0 0 0 3px #fff1c54d;animation:candidate-pulse 1.4s ease-in-out infinite}
+.thinking-info{font-size:10px;line-height:1.8;color:#886a2c;margin:0 0 8px}
+.cell.evaluated-move{z-index:3}
+.move-win-rate{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);border:1px solid #a88b4f;border-radius:3px;background:#fff8e5;color:#655021;padding:1px 3px;font-size:clamp(7px,.7vw,9px);line-height:1.15;white-space:nowrap;pointer-events:none;box-shadow:0 1px 3px #48381729;font-variant-numeric:tabular-nums}
+.cell.bottom-row .move-win-rate{bottom:auto;top:-3px}
+.cell.left-column .move-win-rate{left:0;transform:none}
+.cell.right-column .move-win-rate{left:auto;right:0;transform:none}
+@keyframes candidate-pulse{50%{opacity:.8;box-shadow:0 0 0 4px #c28b273d}}
