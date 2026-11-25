@@ -135,14 +135,15 @@ RIF 流程：暫定黑方提出三子 → 暫定白方交換／保持 → 確定
 | 檔案 | 用途 |
 | --- | --- |
 | `index.html`、`styles.css`、`app.mjs` | 畫面與玩家操作 |
-| `lib/rules.mjs` | 黑白勝負與遞迴禁手 |
+| `lib/rules.mjs` | 黑白勝負、遞迴禁手與 88 線位元遮罩加速判定 |
 | `lib/game.mjs` | RIF 階段及顏色交換 |
 | `lib/openings.mjs`、`data/opening-rates.json` | 26 開局與交換感知評估 |
-| `lib/local-ai.mjs` | 白棋及開局戰術評分 |
+| `lib/engine.mjs` | 融合連珠引擎（KataGomo VCF／禁手位元圖＋Embryo 不對稱棋型／禁手攻擊＋Yixin PVS／VCT／SearchDefend） |
+| `lib/local-ai.mjs` | 白棋及開局融合搜尋介面 |
 | `lib/tactics.mjs` | 立即勝棋、必擋四及禁手攻擊 |
 | `lib/persistence.mjs` | 瀏覽器自動續局與歷史紀錄 |
 | `lib/book.mjs` | 私有胜率棋譜與對稱映射 |
-| `server.mjs`、`lib/agent.mjs` | 私有環境設定、HTTP 與 API adapter |
+| `server.mjs`、`lib/agent.mjs` | 私有環境設定、HTTP、本地融合引擎 (`local-engine`) 與遠端 API adapter |
 
 規則、流程、UI 與伺服器測試：
 

@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BLACK, WHITE, SIZE, createBoard, analyzeMove, getLegalMoves, toCoordinate } from '../lib/rules.mjs';
+import {
+  BLACK,
+  WHITE,
+  SIZE,
+  createBoard,
+  analyzeMove,
+  getLegalMoves,
+  toCoordinate,
+  isBlackForbiddenFast,
+  computeForbiddenMap,
+} from '../lib/rules.mjs';
 
 function position(black = [], white = []) {
   const board = createBoard();
@@ -180,4 +190,90 @@ test('nearby candidate enumeration starts at centre and covers distance two from
     { row: 2, col: 0 }, { row: 2, col: 1 }, { row: 2, col: 2 },
   ]);
   assert.equal(getLegalMoves(createBoard(), BLACK).length, 225);
+});
+
+test('Renju 4-4-3 and 4-3-3 compound fouls with straight/jump fours and live/jump threes are forbidden', () => {
+  // 4-4-3: horizontal straight-4 + vertical jump-4 + diagonal jump-3
+  const f443 = expectMove(
+    position([[7, 4], [7, 5], [7, 6], [3, 7], [4, 7], [6, 7], [5, 5], [8, 8]]),
+    7,
+    7,
+    BLACK,
+    { legal: false, kind: 'double-four', fours: 2, threes: 1 },
+  );
+  assert.match(f443.reason, /四四三/);
+
+  // 4-3-3: horizontal jump-4 + vertical straight open-3 + diagonal jump-3
+  const f433 = expectMove(
+    position([[7, 3], [7, 4], [7, 6], [6, 7], [8, 7], [5, 5], [8, 8]]),
+    7,
+    7,
+    BLACK,
+    { legal: false, kind: 'double-three', fours: 1, threes: 2 },
+  );
+  assert.match(f433.reason, /四三三/);
+
+  // Legal 4-3: jump-4 + jump-3 is permitted for Black
+  expectMove(
+    position([[7, 3], [7, 4], [7, 6], [5, 7], [8, 7]]),
+    7,
+    7,
+    BLACK,
+    { legal: true, kind: 'normal', fours: 1, threes: 1 },
+  );
+});
+
+test('jump-4, jump-3, same-line 4-4, 7-in-a-row overline, and exact-5 priority behave per RIF rules', () => {
+  // Jump-3 + jump-3 double-three
+  expectMove(position([[7, 5], [7, 8], [5, 7], [8, 7]]), 7, 7, BLACK, { legal: false, kind: 'double-three', threes: 2 });
+  // Jump-4 + jump-4 double-four
+  expectMove(position([[7, 3], [7, 4], [7, 6], [3, 7], [4, 7], [6, 7]]), 7, 7, BLACK, { legal: false, kind: 'double-four', fours: 2 });
+  // Same-line double jump-4: X.XMX.X
+  expectMove(position([[7, 4], [7, 6], [7, 8], [7, 10]]), 7, 7, BLACK, { legal: false, kind: 'double-four', fours: 2 });
+  // 7-in-a-row overline
+  expectMove(position([[7, 4], [7, 5], [7, 6], [7, 8], [7, 9], [7, 10]]), 7, 7, BLACK, { legal: false, kind: 'overline' });
+  // Exact 5 overrides 4-3-3 / 4-4-3
+  expectMove(
+    position([[7, 3], [7, 4], [7, 5], [7, 6], [4, 7], [5, 7], [6, 7], [5, 5], [8, 8]]),
+    7,
+    7,
+    BLACK,
+    { legal: true, kind: 'five', win: true },
+  );
+  // White has no forbidden moves for 4-4-3 or 6+
+  expectMove(
+    position([], [[7, 4], [7, 5], [7, 6], [3, 7], [4, 7], [6, 7], [5, 5], [8, 8]]),
+    7,
+    7,
+    WHITE,
+    { legal: true, kind: 'normal', fours: 2 },
+  );
+});
+
+test('fast KataGomo-style forbidden map and checker match analyzeMove across 100 dense boards', () => {
+  let seed = 987654321;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let b = 0; b < 100; b++) {
+    const board = createBoard();
+    const stones = 14 + Math.floor(rand() * 28);
+    for (let i = 0; i < stones; i++) {
+      const r = 3 + Math.floor(rand() * 9);
+      const c = 3 + Math.floor(rand() * 9);
+      if (board[r * SIZE + c] === 0) board[r * SIZE + c] = i % 3 === 0 ? WHITE : BLACK;
+    }
+    const frozen = Object.freeze([...board]);
+    const map = computeForbiddenMap(frozen);
+    for (let idx = 0; idx < SIZE * SIZE; idx++) {
+      if (frozen[idx] !== 0) {
+        assert.equal(map[idx], 0);
+        continue;
+      }
+      const expected = !analyzeMove(frozen, Math.floor(idx / SIZE), idx % SIZE, BLACK).legal;
+      assert.equal(map[idx] === 1, expected, `map mismatch at board ${b} idx ${idx}`);
+      assert.equal(isBlackForbiddenFast(frozen, idx), expected, `fast mismatch at board ${b} idx ${idx}`);
+    }
+  }
 });

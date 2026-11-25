@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { AgentError, normalizeConfig, publicConfig, requestAgent } from './lib/agent.mjs';
 import { BookError, createBook } from './lib/book.mjs';
 import { BLACK, WHITE, analyzeMove, getLegalMoves } from './lib/rules.mjs';
-import { rankLocalMoves } from './lib/local-ai.mjs';
+import { searchBestMove } from './lib/engine.mjs';
 import { findTacticalMove } from './lib/tactics.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,7 @@ const STATIC_FILES = new Map([
   ['/lib/game.mjs', ['lib/game.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/openings.mjs', ['lib/openings.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/local-ai.mjs', ['lib/local-ai.mjs', 'text/javascript; charset=utf-8']],
+  ['/lib/engine.mjs', ['lib/engine.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/tactics.mjs', ['lib/tactics.mjs', 'text/javascript; charset=utf-8']],
   ['/lib/persistence.mjs', ['lib/persistence.mjs', 'text/javascript; charset=utf-8']],
 ]);
@@ -165,13 +166,23 @@ function validateState(input, color = BLACK) {
 
 function localWhiteMove(state, policy) {
   const allowed = new Set(policy.legalMoves.map((move) => move.row * 15 + move.col));
-  const candidate = policy.preferredMove ?? rankLocalMoves(state.board, WHITE).find((move) => allowed.has(move.row * 15 + move.col))
-    ?? [...policy.legalMoves].sort((a, b) => (Math.abs(a.row - 7) + Math.abs(a.col - 7)) - (Math.abs(b.row - 7) + Math.abs(b.col - 7)) || a.row - b.row || a.col - b.col)[0];
-  if (!candidate) throw new AgentError('no-legal-moves', '白方已沒有合法落點。', 409);
-  const move = { row: candidate.row, col: candidate.col };
+  let move;
+  let reason = '白棋依目前盤面使用融合引擎（KataGomo VCF＋Embryo 評估＋Yixin PVS）選擇落點。';
+  if (policy.preferredMove && allowed.has(policy.preferredMove.row * 15 + policy.preferredMove.col)) {
+    move = { row: policy.preferredMove.row, col: policy.preferredMove.col };
+  } else {
+    const search = searchBestMove(state.board, WHITE, {
+      allowedMoves: policy.legalMoves,
+      timeBudgetMs: 700,
+      maxDepth: 8,
+    });
+    move = search.move;
+    reason = search.reason;
+  }
+  if (!move) throw new AgentError('no-legal-moves', '白方已沒有合法落點。', 409);
   const analysis = analyzeMove(state.board, move.row, move.col, WHITE);
   if (!analysis.legal) throw new AgentError('invalid-local-move', '白棋戰術落點無效；盤面已保留，請重試。', 500);
-  return { move, reason: analysis.win ? '白棋完成五連，取得勝利。' : '白棋依目前盤面使用本地戰術選擇落點。', winRate: analysis.win ? 1 : null };
+  return { move, reason: analysis.win ? '白棋完成五連，取得勝利。' : reason, winRate: analysis.win ? 1 : null };
 }
 
 export function createServer({ config = loadConfig(), fetchImpl = fetch, book, bookPath } = {}) {
