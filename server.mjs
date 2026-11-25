@@ -179,8 +179,8 @@ function localWhiteMove(state, policy) {
   } else {
     const search = searchBestMove(state.board, WHITE, {
       allowedMoves: policy.legalMoves,
-      timeBudgetMs: 700,
-      maxDepth: 8,
+      timeBudgetMs: 1100,
+      maxDepth: 10,
     });
     move = search.move;
     reason = search.reason;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BLACK, WHITE, SIZE, createBoard, analyzeMove } from '../lib/rules.mjs';
-import { solveVCF, solveVCT, searchBestMove, rankMoves } from '../lib/engine.mjs';
+import { BoardState, solveVCF, solveVCT, runMCTSSearch, searchBestMove, rankMoves } from '../lib/engine.mjs';
 import { chooseLocalMove } from '../lib/local-ai.mjs';
 import { createBook } from '../lib/book.mjs';
 import { createGame, proposeOpening, decideSwap, placeStone, offerFifth, chooseFifth } from '../lib/game.mjs';
@@ -149,4 +149,76 @@ test('default zero-config server uses local fused engine for both Black and Whit
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('incremental BoardState play/undo stays bit-for-bit consistent with fresh construction', () => {
+  const board = createBoard();
+  const state = new BoardState(board);
+  const seq = [
+    [7, 7, BLACK], [6, 7, WHITE], [6, 8, BLACK], [8, 6, WHITE],
+    [8, 8, BLACK], [7, 8, WHITE], [9, 7, BLACK], [6, 6, WHITE],
+  ];
+  for (const [r, c, col] of seq) {
+    const idx = r * SIZE + c;
+    board[idx] = col;
+    state.play(idx, col);
+    const fresh = new BoardState(board);
+    assert.deepEqual(state.patB, fresh.patB);
+    assert.deepEqual(state.patW, fresh.patW);
+    assert.deepEqual(state.cntB, fresh.cntB);
+    assert.deepEqual(state.cntW, fresh.cntW);
+    assert.deepEqual(state.nearby, fresh.nearby);
+    assert.equal(state.hHi, fresh.hHi);
+    assert.equal(state.hLo, fresh.hLo);
+  }
+  for (let i = seq.length - 1; i >= 0; i--) {
+    const [r, c] = seq[i];
+    const idx = r * SIZE + c;
+    board[idx] = 0;
+    state.undo(idx);
+    const fresh = new BoardState(board);
+    assert.deepEqual(state.patB, fresh.patB);
+    assert.deepEqual(state.patW, fresh.patW);
+    assert.deepEqual(state.cntB, fresh.cntB);
+    assert.deepEqual(state.cntW, fresh.cntW);
+  }
+});
+
+test('balanced middlegame reaches depth >= 4 without false MATE cutoffs and calibrates winRate', () => {
+  const board = position(
+    [[7, 7], [5, 9], [7, 8], [8, 8], [6, 9]],
+    [[6, 7], [6, 8], [8, 6], [5, 8], [7, 6]],
+  );
+  const res = searchBestMove(board, BLACK, { timeBudgetMs: 220, maxDepth: 8 });
+  assert.equal(analyzeMove(board, res.move.row, res.move.col, BLACK).legal, true);
+  assert.ok(res.depth >= 4, `expected depth >= 4, got ${res.depth}`);
+  assert.ok(res.winRate > 0.1 && res.winRate < 0.95, `unexpected winRate ${res.winRate}`);
+  assert.equal(res.provenWin, false);
+});
+
+test('SearchDefend detects and blocks opponent VCT threats', () => {
+  // White has no VCF, but threatens a 4-3 VCT at (7,7) via sleep-4 (7,4..7,6) + jump-3 (5,7),(8,7).
+  // Black must find the refutation blocking White's VCT.
+  const board = position(
+    [[7, 3], [6, 5], [9, 8], [4, 7]],
+    [[7, 4], [7, 5], [7, 6], [5, 7], [8, 7]],
+  );
+  assert.equal(solveVCF(board, WHITE, { maxDepth: 8 }).win, false);
+  assert.equal(solveVCT(board, WHITE, { maxDepth: 6 }).win, true);
+  const res = searchBestMove(board, BLACK, { timeBudgetMs: 250, maxDepth: 6 });
+  assert.equal(analyzeMove(board, res.move.row, res.move.col, BLACK).legal, true);
+  const after = [...board];
+  after[res.move.row * SIZE + res.move.col] = BLACK;
+  assert.equal(solveVCT(after, WHITE, { maxDepth: 4 }).win, false);
+});
+
+test('KataGomo PUCT-MCTS explores playouts, respects Black fouls, and returns valid winRate', () => {
+  const board = Object.freeze(position(
+    [[7, 3], [7, 4], [7, 6], [6, 7], [8, 7], [5, 5], [8, 8]],
+    [[2, 2], [2, 4], [12, 12]],
+  ));
+  const res = runMCTSSearch(board, BLACK, { timeBudgetMs: 120, maxPlayouts: 150 });
+  assert.ok(res.playouts >= 1);
+  assert.equal(analyzeMove(board, res.move.row, res.move.col, BLACK).legal, true);
+  assert.ok(res.winRate >= 0 && res.winRate <= 1);
 });
