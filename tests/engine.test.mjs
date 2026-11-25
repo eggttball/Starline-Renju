@@ -110,7 +110,7 @@ test('Black AI never returns a forbidden move even when surrounded by tempting 4
   assert.equal(ranked.some((m) => m.row === 7 && m.col === 7), false);
 });
 
-test('local-engine format integrates cleanly with server /api/agent and /api/white', async () => {
+test('default zero-config server uses local fused engine for both Black and White without any API key or model', async () => {
   let game = decideSwap(proposeOpening(createGame('both'), 'd3'), false);
   game = placeStone(game, 6, 8);
   game = offerFifth(offerFifth(game, 8, 6), 8, 7);
@@ -118,10 +118,7 @@ test('local-engine format integrates cleanly with server /api/agent and /api/whi
   game = placeStone(game, 9, 7);
 
   const book = createBook();
-  const server = createServer({
-    config: { format: 'local-engine', timeoutMs: 2000 },
-    book,
-  });
+  const server = createServer({ config: {}, book });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -138,6 +135,16 @@ test('local-engine format integrates cleanly with server /api/agent and /api/whi
     assert.equal(analyzeMove(game.board, dataBlack.move.row, dataBlack.move.col, BLACK).legal, true);
     assert.ok(dataBlack.winRate >= 0 && dataBlack.winRate <= 1);
     assert.ok(dataBlack.reason.length > 0);
+
+    game = placeStone(game, dataBlack.move.row, dataBlack.move.col);
+    const resWhite = await fetch(`${origin}/api/white`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ board: game.board, moves: game.moves }),
+    });
+    assert.equal(resWhite.status, 200);
+    const dataWhite = await resWhite.json();
+    assert.equal(analyzeMove(game.board, dataWhite.move.row, dataWhite.move.col, WHITE).legal, true);
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));

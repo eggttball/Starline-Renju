@@ -175,8 +175,9 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
     $('save-status').textContent=started?(game.phase==='finished'?'本局已保存於歷史賽局。':'已自動保存 · 關閉網頁或重開電腦後可續局。'):'開始後自動保存，關閉網頁也能續局。';
     $('export-button').disabled=!game.moves.length;
     $('agent-indicator').className=`status-light${agentError?' error':busy?' thinking':api.configured?' connected':''}`;
-    $('agent-title').textContent=agentError?`${colorName(game.turn)}棋 AI 對局已暫停`:busy&&game.phase==='playing'&&(game.turn===BLACK||game.moves.length>=7)?`${colorName(game.turn)}棋 AI 正在思考`:!apiLoaded?'正在讀取 API 設定':api.configured?'黑棋 AI 已設定':'黑棋 AI 尚未設定';
-    $('agent-detail').textContent=agentError?'保留目前盤面，設定或修復 API 後可重試。':api.configured?'連五、必擋四與禁手攻擊直接落子；其餘局面由 AI 評估。':'強制戰術直接落子；其餘局面白棋使用本地運算，黑棋等待 API。';
+    const isLocalEngine = api.format === 'local-engine';
+    $('agent-title').textContent=agentError?`${colorName(game.turn)}棋 AI 對局已暫停`:busy&&game.phase==='playing'&&(game.turn===BLACK||game.moves.length>=7)?`${colorName(game.turn)}棋 AI 正在思考`:!apiLoaded?'正在讀取 AI 設定':isLocalEngine?'本地融合 AI 已就緒':api.configured?'黑棋 AI 已設定':'遠端 AI API 尚未設定';
+    $('agent-detail').textContent=agentError?'保留目前盤面，設定或修復 AI 設定後可重試。':isLocalEngine?'預設使用本地融合引擎（KataGomo＋Embryo＋Yixin），無需設定金鑰或模型。':api.configured?'連五、必擋四與禁手攻擊直接落子；其餘局面由遠端 AI 評估。':'已啟用遠端 API 但尚未填寫設定；請檢查 .env 或停用 AI_API_ENABLED。';
     $('white-mode-info').textContent='落子標記顯示電腦持棋方的勝率；未經評估的落子顯示「未評估」。';
     $('retry-button').hidden=!agentError;
     $('retry-button').disabled=busy;
@@ -301,7 +302,7 @@ export function mountApp(doc,{fetchImpl,delay=350,storage}={}) {
     $('decline-draw').addEventListener('click',closeDialog);
   });
   $('rules-button').addEventListener('click',()=>showDialog('<h2>國際 RIF 連珠規則</h2><p>本遊戲使用傳統 RIF 開局規則，在 15 × 15 路棋盤上對弈。</p><ol><li>暫定黑方提出一種標準三子開局：黑、白、黑。</li><li>暫定白方決定交換顏色，或保持原持棋方。</li><li>確定白方下第四手；黑方提出兩個在目前盤面下不對稱等價的第五手。</li><li>白方保留一個第五手，接著下第六手，之後黑白輪流落子。</li></ol><p>黑棋只有精確五連獲勝；三三、四四及長連為禁手，實際落下禁手即判白方勝。活三需能以合法延伸形成兩端開放的直四，假三不計。依官方 §9.2，若同手已形成精確五連則優先獲勝。白棋五連或長連皆勝。雙方也可同意和棋。</p><p>每局自動保存於瀏覽器，重開網頁會續接未完成局。正常結束保存到歷史賽局；「放棄比賽」移除本局且不列入歷史。未完成局不能直接被新局覆蓋。</p><p>棋盤支援方向鍵移動、Enter 落子。開局後角色可能交換，請查看畫面持棋方。</p><p><a href="https://www.renju.net/rifrules/" target="_blank" rel="noopener noreferrer">閱讀 RIF 官方完整規則 ↗</a></p>'));
-  $('setup-button').addEventListener('click',()=>showDialog('<h2>設定黑棋 AI agent</h2><p>金鑰只放在伺服器端的 <code>renju/.env</code>，不需要填入網頁。</p><ol><li>複製 <code>.env.example</code> 為 <code>.env</code>。</li><li>填入 <code>AI_API_ENDPOINT</code>、<code>AI_API_KEY</code>、<code>AI_API_MODEL</code>。</li><li>依服務選擇 <code>AI_API_FORMAT</code>：<code>openai-chat</code>、<code>openai-responses</code> 或 <code>agent-json</code>。</li><li>重新啟動 <code>npm start</code>，再按「重新詢問 AI」。</li></ol><p>Endpoint 使用完整 API URL。回應落點為零起算 <code>{"move":{"row":7,"col":7},"reason":"..."}</code>；棋盤左上角為 row 0、col 0，中心為 row 7、col 7。</p><p>黑棋 API 回應逾時或無效會暫停並保留盤面；詳細格式與設定範例請見 <code>renju/README.md</code>。</p>'));
+  $('setup-button').addEventListener('click',()=>showDialog('<h2>AI 對弈模式設定</h2><p>預設使用內建的<strong>本地融合連珠引擎</strong>（結合 KataGomo VCF、Embryo 棋型評估與 Yixin PVS／SearchDefend），<strong>無需設定金鑰或模型</strong>即可直接對弈。</p><p>若要改用外部遠端 AI API，請在伺服器端的 <code>.env</code> 啟用並設定（金鑰不會傳送到網頁）：</p><ol><li>複製 <code>.env.example</code> 為 <code>.env</code>。</li><li>設定 <code>AI_API_ENABLED=true</code>。</li><li>填入 <code>AI_API_ENDPOINT</code>、<code>AI_API_KEY</code>、<code>AI_API_MODEL</code> 與 <code>AI_API_FORMAT</code>（<code>openai-chat</code>、<code>openai-responses</code> 或 <code>agent-json</code>）。</li><li>重新啟動 <code>npm start</code>，再按「重新詢問 AI」。</li></ol>'));
   function downloadRecord(record) {
     const payload={rules:'RIF classic',id:record.id,createdAt:record.createdAt,updatedAt:record.updatedAt,opening:OPENINGS.find(o=>o.id===record.openingId)?.name,mode:record.mode,players:record.players,swapped:record.swapped,result:record.result,moves:record.moves.map(m=>({...m,coordinate:toCoordinate(m.row,m.col)}))};
     const blob=new win.Blob([JSON.stringify(payload,null,2)],{type:'application/json'});

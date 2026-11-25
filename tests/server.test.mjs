@@ -80,8 +80,18 @@ function rawRequest(origin, pathname, headers = {}) {
   });
 }
 
-test('config status discloses no key or endpoint and unavailable API never falls back', async () => {
+test('default config uses local fused engine with no key/model, and explicitly enabled unconfigured remote API never falls back', async () => {
   await withServer({ config: {} }, async (origin) => {
+    const status = await fetch(`${origin}/api/config`);
+    assert.equal(status.status, 200);
+    assert.deepEqual(await status.json(), { configured: true, format: 'local-engine', model: 'starline-fusion' });
+    const result = await post(origin, position());
+    assert.equal(result.status, 200);
+    const body = await result.json();
+    assert.ok(Number.isInteger(body.move?.row) && Number.isInteger(body.move?.col));
+    assert.ok(body.winRate >= 0 && body.winRate <= 1);
+  });
+  await withServer({ config: { enabled: true } }, async (origin) => {
     const status = await fetch(`${origin}/api/config`);
     assert.equal(status.status, 200);
     assert.deepEqual(await status.json(), { configured: false, format: 'openai-chat' });
@@ -99,6 +109,23 @@ test('config status discloses no key or endpoint and unavailable API never falls
     assert.ok(!text.includes(API_KEY));
     assert.ok(!text.includes(config.endpoint));
   });
+});
+
+test('dotenv parsing respects AI_API_ENABLED=false even when remote format/keys exist', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'renju-env-disabled-'));
+  const envPath = path.join(directory, '.env');
+  try {
+    await writeFile(envPath, 'AI_API_ENABLED=false\nAI_API_KEY=ignored-key\nAI_API_ENDPOINT=https://example.test/complete\nAI_API_FORMAT=openai-chat\n');
+    const loaded = implementation.loadConfig({ envPath, env: {} });
+    assert.equal(loaded.remoteEnabled, false);
+    assert.equal(loaded.format, 'local-engine');
+    await withServer({ config: loaded }, async (origin) => {
+      const cfg = await (await fetch(`${origin}/api/config`)).json();
+      assert.deepEqual(cfg, { configured: true, format: 'local-engine', model: 'starline-fusion' });
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('dotenv parsing uses server-only values with environment overrides', async () => {
@@ -505,10 +532,10 @@ test('black book preference is reevaluated remotely every turn and uses each new
   });
 });
 
-test('a high remembered black move cannot bypass missing API configuration or be substituted by the agent', async () => {
+test('a high remembered black move cannot bypass missing enabled remote API configuration or be substituted by the agent', async () => {
   const book = createBook(), state = position(), move = { row: 6, col: 6 };
   await book.record({ ...state, color: 1, move, winRate: .9 });
-  await withServer({ config: {}, book }, async (origin) => {
+  await withServer({ config: { enabled: true }, book }, async (origin) => {
     const response = await post(origin, state);
     assert.equal(response.status, 503);
     assert.equal((await response.json()).move, undefined);

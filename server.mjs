@@ -54,7 +54,13 @@ export function loadConfig({ envPath = path.join(ROOT, '.env'), env = process.en
   const host = values.HOST || '127.0.0.1';
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new Error('HOST 必須是 127.0.0.1、localhost 或 ::1。');
   return {
-    ...normalizeConfig({ apiKey: values.AI_API_KEY, endpoint: values.AI_API_ENDPOINT, model: values.AI_API_MODEL, format: values.AI_API_FORMAT }),
+    ...normalizeConfig({
+      enabled: values.AI_API_ENABLED,
+      apiKey: values.AI_API_KEY,
+      endpoint: values.AI_API_ENDPOINT,
+      model: values.AI_API_MODEL,
+      format: values.AI_API_FORMAT,
+    }),
     host,
     port,
   };
@@ -229,12 +235,12 @@ export function createServer({ config = loadConfig(), fetchImpl = fetch, book, b
           }
           const policy = await privateBook.query({ ...state, color });
           if (cancellation.signal.aborted) return;
-          const useRemote = color === BLACK || publicConfig(privateConfig).configured;
-          const result = useRemote
+          const useAgent = color === BLACK || (privateConfig.remoteEnabled && publicConfig(privateConfig).configured);
+          const result = useAgent
             ? await requestAgent({ ...state, color, legalMoves: policy.legalMoves, preferredMove: policy.preferredMove }, { config: privateConfig, fetchImpl, signal: cancellation.signal })
             : localWhiteMove(state, policy);
           if (cancellation.signal.aborted) return;
-          if (result.winRate !== null) await privateBook.record({ ...state, color, move: result.move, winRate: result.winRate, source: useRemote ? 'agent-estimate' : 'tactical-win' });
+          if (result.winRate !== null) await privateBook.record({ ...state, color, move: result.move, winRate: result.winRate, source: useAgent ? 'agent-estimate' : 'tactical-win' });
           if (!response.destroyed && !cancellation.signal.aborted) return json(response, 200, result);
           return;
         } finally {
@@ -273,8 +279,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     });
     server.listen(config.port, config.host, () => {
       const host = config.host === '::1' ? '[::1]' : config.host;
+      const pub = publicConfig(config);
       console.log(`連珠遊戲：http://${host}:${config.port}`);
-      if (!publicConfig(config).configured) console.log('黑棋 API 尚未設定；請填寫 renju/.env 後重新啟動。');
+      if (pub.format === 'local-engine') console.log('AI 模式：本地融合連珠引擎（starline-fusion），無需設定外部 API 金鑰或模型。');
+      else if (!pub.configured) console.log('遠端 AI API 已啟用但尚未完成設定；請填寫 renju/.env 後重新啟動。');
     });
   } catch (error) {
     console.error(error.message);
